@@ -4,7 +4,7 @@
     "commonjs": true,
     "es2021": true
   },
-  "extends": ["airbnb-base", "@scriptable-ios"],
+  "extends": "airbnb-base",
   "overrides": [],
   "parser": "@babel/eslint-parser",
   "parserOptions": {
@@ -13,9 +13,5 @@
       "globalReturn": true
     }
   },
-  "rules": {
-    "no-use-before-define": ["error", {
-      "functions": false
-    }]
-  }
+  "rules": {}
 }
