@@ -1,0 +1,19 @@
+{
+  "name": "Scriptable",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "types": "npx -p typescript tsc *.js --declaration --allowJs --emitDeclarationOnly --outDir types",
+    "watch:types": "yarn types --watch",
+    "build": "babel src -d dist",
+    "watch": "yarn build --watch"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.20.7",
+    "@babel/core": "^7.20.12",
+    "@babel/eslint-parser": "^7.19.1",
+    "eslint": "^7.32.0 || ^8.2.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.25.2"
+  }
+}
