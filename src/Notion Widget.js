@@ -17,13 +17,11 @@ let widgetConfig = Keychain.contains(KEYCHAIN_KEY) ? JSON.parse(Keychain.get(KEY
     await showSettings();
   }
 
-  if (config.runsInWidget || args.notification) {
-    const widget = await buildWidget();
-    if (widgetConfig.runsInWidget) {
-      Script.setWidget(widget);
-    } else {
-      widget.presentMedium();
-    }
+  const widget = await buildWidget();
+  Script.setWidget(widget);
+
+  if (args.notification) {
+    widget.presentMedium();
   }
 
   Script.complete();
@@ -154,7 +152,7 @@ async function buildWidget() {
   <spacer value="16" />
   <vstack>
     ${tasks.map(
-    (task) => concatMarkup/* xml */`
+      (task) => concatMarkup/* xml */`
         <hstack>
          <image styles="${styles.task.image}" src="${SFSymbol.named('circle').image}" />
          <spacer value="6" />
@@ -162,7 +160,7 @@ async function buildWidget() {
         </hstack>
         <spacer value="8" />
       `,
-  )}
+    )}
     <spacer />
   </vstack>
   <hstack styles="${styles.footer.stack}">
