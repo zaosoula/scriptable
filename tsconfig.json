@@ -2,5 +2,9 @@
   "compilerOptions": {
     "lib": ["ES2021"],
     "moduleDetection": "force",
+    "types": [
+      "@types/scriptable-ios"
+    ],
+    "removeComments": false
   }
 }
