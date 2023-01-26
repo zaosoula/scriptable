@@ -1,3 +1,0 @@
-{
-  "plugins": ["./babel-tranformers/requireToImportModule.js"]
-}
