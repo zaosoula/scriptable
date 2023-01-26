@@ -1,13 +1,12 @@
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: light-gray; icon-glyph: cube;
-module.exports = class NotionApi {
+export default class NotionApi {
+  secret: string;
+  base = 'https://api.notion.com/v1';
+
   constructor(secret) {
     this.secret = secret;
-    this.base = 'https://api.notion.com/v1';
   }
 
-  request(method, url, body) {
+  request(method: string, url: string, body?: any) {
     if (!this.base.endsWith('/')) {
       this.base += '/';
     }

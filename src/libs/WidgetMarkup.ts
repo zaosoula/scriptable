@@ -1,10 +1,3 @@
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: light-gray; icon-glyph: cube;
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: deep-green; icon-glyph: microscope;
-
 // https://github.com/rafaelgandi/WidgetMarkup-Scriptable
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -120,7 +113,7 @@ const WidgetMarkup = (() => {
         return widgetInstance;
     }
 
-    function _getAttrValue(attrs = [], name = 'styles') {
+    function _getAttrValue(attrs = [], name = 'styles'): any {
         let attr = {};
         attrs.forEach((a) => {
             if (a.name.toLowerCase() === name.toLowerCase()) {
@@ -247,7 +240,5 @@ const WidgetMarkup = (() => {
     return { widgetMarkup, concatMarkup };
 })();
 
-
-// Expose template literal tags
-module.exports.widgetMarkup = WidgetMarkup.widgetMarkup;
-module.exports.concatMarkup = WidgetMarkup.concatMarkup;
+export const widgetMarkup = WidgetMarkup.widgetMarkup;
+export const concatMarkup = WidgetMarkup.concatMarkup;
