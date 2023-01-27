@@ -5,6 +5,7 @@
     "types": [
       "@types/scriptable-ios"
     ],
-    "removeComments": false
+    "removeComments": false,
+    "allowJs": true
   }
 }

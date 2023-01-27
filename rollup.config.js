@@ -15,11 +15,10 @@ const input = glob.sync('src/*.[tj]s', {
 
 const keepScriptableVars = (input) => ({
   generateBundle: (_, bundles) => Object.fromEntries(Object.entries(bundles).map(([name, bundle]) => {
-    console.log(input);
     const entry = Object.keys(bundle.modules).find((x) => Array.isArray(input) ? input.includes(x) : input === x);
     const code = fs.readFileSync(entry, { encoding: 'utf-8'});
     let topComments = code.match(/(\/\/(.*)\n)+/m)[0];
-    topComments += `// Build at ${new Date().toISOString()}\n`;
+    topComments += `// Build at ${new Date().toISOString().split('.').shift()}\n`;
     bundle.code = topComments + bundle.code;
     return [name, bundle];
   })),

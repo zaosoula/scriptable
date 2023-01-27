@@ -3,16 +3,25 @@
 // icon-color: cyan; icon-glyph: tasks;
 import NotionApi from './libs/NotionApi';
 import { widgetMarkup, concatMarkup } from './libs/WidgetMarkup';
-
+import { getSliceForWidget, generateSlices } from './libs/NoBackground';
 const KEYCHAIN_KEY = 'fr.zaosoula.notionwidget';
-
-const fetchKeychainConfig = () => Keychain.contains(KEYCHAIN_KEY) ? JSON.parse(Keychain.get(KEYCHAIN_KEY)) : {
+const getDefaultConfig = () => ({
   notionSecret: '',
   databaseId: '',
   sorts: [],
   filter: {},
-};
-let widgetConfig = fetchKeychainConfig();
+  color: 'auto',
+  useBackgroundImage: false,
+})
+
+const fetchKeychainConfig = () => 
+  Keychain.contains(KEYCHAIN_KEY) 
+  ? { 
+      ...getDefaultConfig(), 
+      ...JSON.parse(Keychain.get(KEYCHAIN_KEY))
+    } 
+  : getDefaultConfig();
+let widgetConfig: ReturnType<typeof getDefaultConfig> = fetchKeychainConfig();
 
 (async () => {
   if (config.runsInApp && !args.notification) {
@@ -27,31 +36,45 @@ async function showMenu() {
   await testSettings();
 
   const alert = new Alert();
-    if(args.queryParameters.settings) {
-      await showSettings();
-    }
+  if (args.queryParameters.settings) {
+    await showSettings();
+  }
 
-    alert.title = Script.name();
-    alert.addAction('Preview the widget');
-    alert.addAction('Open the settings');
-    alert.addCancelAction('Close');
-    const action = await alert.presentSheet();
-    switch (action) {
-      case 0:
-        const widget = await buildWidget();
-        widget.presentMedium();
-        break;
-      case 1:
-        await showSettings();
-        await showMenu();
-        break;
-      default:
-        break;
-    }
+  alert.title = Script.name();
+  alert.addAction('Preview the widget');
+  alert.addAction('Open the settings');
+  alert.addAction('Generate widget background');
+  alert.addCancelAction('Close');
+  const action = await alert.presentSheet();
+  switch (action) {
+    case 0:
+      const widget = await buildWidget();
+      widget.presentMedium();
+      break;
+    case 1:
+      await showSettings();
+      await showMenu();
+      break;
+    case 2:
+      await generateSlices({ caller: 'self' });
+      console.log(await getSliceForWidget(Script.name(), true));
+      break;
+    default:
+      break;
+  }
 }
 
 async function showSettings() {
+  const selectOption = (value, label, selectedValue) => concatMarkup/* xml */`<option value="${value}" ${value == selectedValue ? 'selected' : ''}>${label}</option>`;
   const view = new WebView();
+  view.shouldAllowRequest = request => {    
+    if(request.url.startsWith("http")) {
+      Safari.open(request.url);
+      return false;
+    }
+
+    return true;
+  }
   await view.loadHTML(/* html */`
 <!DOCTYPE html>
 <html lang="en">
@@ -64,19 +87,57 @@ async function showSettings() {
 </head>
 
 <body>
+  <nav class="container-fluid">
+      <ul>
+        <li><strong>${Script.name()}</strong></li>
+      </ul>
+      <ul>
+      <li><a href="https://github.com/zaosoula/scriptable">Docs</a></li>
+      </ul>
+    </nav>
+    <hr />
   <main class="container">
-    <h1>${Script.name()}</h1>
-    <label for="notionSecret">Notion Integration Secret</label>
-    <input type="text" id="notionSecret" name="notionSecret" placeholder="secret_XXXXXXX" value="${widgetConfig.notionSecret}" required>
-    
-    <label for="databaseId">Database ID</label>
-    <input type="text" id="databaseId" name="databaseId" placeholder="XXXXXXXXXX" value="${widgetConfig.databaseId}" required>
+    <details>
+      <summary>Notion settings</summary>
+      
+      <label for="notionSecret">Notion Integration Secret</label>
+      <input type="text" id="notionSecret" name="notionSecret" placeholder="secret_XXXXXXX" value="${widgetConfig.notionSecret}" required>
+      <small><a href="https://developers.notion.com/docs/create-a-notion-integration#step-1-create-an-integration">Create an integration</a></small>
+      
+      <label for="databaseId">Database ID</label>
+      <input type="text" id="databaseId" name="databaseId" placeholder="XXXXXXXXXX" value="${widgetConfig.databaseId}" required>
+      <small><a href="https://developers.notion.com/docs/create-a-notion-integration#step-2-share-a-database-with-your-integration">Share a database with your integration</a></small>
 
-    <label for="sorts">Sorts</label>
-    <textarea id="sorts" name="sorts" placeholder="[]" required>${JSON.stringify(widgetConfig.sorts, null, 2)}</textarea>
+      <label for="sorts">Sorts</label>
+      <textarea id="sorts" name="sorts" placeholder="[]" required>${JSON.stringify(widgetConfig.sorts, null, 2)}</textarea>
+      <small><a href="https://developers.notion.com/reference/post-database-query-sort">Sort object</a></small>
 
-    <label for="filter">Filter</label>
-    <textarea id="filter" name="filter" placeholder="{}" required>${JSON.stringify(widgetConfig.filter, null, 2)}</textarea>
+      <label for="filter">Filter</label>
+      <textarea id="filter" name="filter" placeholder="{}" required>${JSON.stringify(widgetConfig.filter, null, 2)}</textarea>
+      <small><a href="https://developers.notion.com/reference/post-database-query-filter">Filter object</a></small>
+
+    </details>
+
+    <details>
+      <summary>Appearance</summary>
+      
+      <fieldset>
+        <label for="useBackgroundImage">
+          <input type="checkbox" id="useBackgroundImage" name="useBackgroundImage" role="switch" ${widgetConfig.useBackgroundImage ? 'checked' : ''}/>
+          Use background image 
+        </label>
+        <small>
+          You can generate the background image from the main menu
+        </small>
+      </fieldset>
+
+      <label for="color">Text color</label>
+      <select id="color" name="color" required>
+        ${selectOption('auto', 'System', widgetConfig.color)}
+        ${selectOption('black', 'Dark', widgetConfig.color)}
+        ${selectOption('white', 'Light', widgetConfig.color)}
+      </select>
+    </details>
   </main>
 
   <script>
@@ -84,6 +145,7 @@ async function showSettings() {
 
     window.getSettings = () => ({
       ...Object.fromEntries(Array.from(document.querySelectorAll('input[name], textarea[name], select[name]')).map(input => [input.name, input.value])),
+      useBackgroundImage: document.querySelector("[name=useBackgroundImage]").checked,
       sorts: parseJson(document.querySelector("[name=sorts]").value, []),
       filter: parseJson(document.querySelector("[name=filter]").value, []),
     })
@@ -129,24 +191,24 @@ async function testSettings() {
       default:
         break;
     }
-      return;
+    return;
   }
 }
 
 async function fetchNotion() {
-    const notion = new NotionApi(widgetConfig.notionSecret);
+  const notion = new NotionApi(widgetConfig.notionSecret);
 
-    const database = await notion.getDatabase(widgetConfig.databaseId);
-    const query = await notion.queryDatabase(widgetConfig.databaseId, {
-      filter: widgetConfig.filter,
-      sorts: widgetConfig.sorts,
-    });
+  const database = await notion.getDatabase(widgetConfig.databaseId);
+  const query = await notion.queryDatabase(widgetConfig.databaseId, {
+    filter: widgetConfig.filter,
+    sorts: widgetConfig.sorts,
+  });
 
-    if(database.object === 'error' || query.object === 'error') {
-      console.warn(database.message || query.message);
-      throw new Error(database.message || query.message);
-    }
-    return { database, query };
+  if (database.object === 'error' || query.object === 'error') {
+    console.warn(database.message || query.message);
+    throw new Error(database.message || query.message);
+  }
+  return { database, query };
 };
 
 // eslint-disable-next-line consistent-return
@@ -161,29 +223,39 @@ async function buildWidget() {
     }));
 
     const notionDeepLink = `notion://www.notion.so/${widgetConfig.databaseId}`;
-    const dynamicColor = Color.dynamic(Color.black(), Color.white())
+    let themeColor = Color.dynamic(Color.black(), Color.white());
+    if (widgetConfig.color !== 'auto') themeColor = Color[widgetConfig.color]();
+    
+    let backgroundImage = null;
+    if (widgetConfig.useBackgroundImage) {
+      backgroundImage = await getSliceForWidget(Script.name());
+    }
+
     const styles = {
+      widget: {
+        backgroundImage,
+      },
       header: {
         stack: {
           url: notionDeepLink,
         },
         image: {
           imageSize: new Size(20, 20),
-          tintColor: dynamicColor,
+          tintColor: themeColor,
         },
         text: {
-          textColor: dynamicColor,
+          textColor: themeColor,
           font: Font.boldSystemFont(15),
         },
         btnRefresh: {
           url: 'shortcuts://run-shortcut?name=Refresh%20All%20Widgets',
           imageSize: new Size(20, 20),
-          tintColor: dynamicColor,
+          tintColor: themeColor,
         },
         btnSettings: {
           url: URLScheme.forRunningScript() + '?settings=true',
           imageSize: new Size(20, 20),
-          tintColor: dynamicColor,
+          tintColor: themeColor,
         },
       },
       task: {
@@ -192,16 +264,16 @@ async function buildWidget() {
         },
         image: {
           imageSize: new Size(15, 15),
-          tintColor: dynamicColor,
+          tintColor: themeColor,
           imageOpacity: 0.75,
           url: notionDeepLink,
         },
         text: {
-          textColor: dynamicColor,
+          textColor: themeColor,
           font: Font.mediumSystemFont(15),
         },
         date: {
-          textColor: dynamicColor,
+          textColor: themeColor,
           font: Font.regularSystemFont(15),
           textOpacity: 0.75,
         },
@@ -209,10 +281,10 @@ async function buildWidget() {
     };
 
     const tasksToDisplay = Math.min(tasks.length, 4);
-    
+
 
     const widget = await widgetMarkup/* xml */`
-<widget>
+<widget styles="${styles.widget}">
   <spacer value="16" />
   <hstack styles="${styles.header.stack}">
     <image styles="${styles.header.image}" src="${SFSymbol.named('checklist').image}" />
@@ -231,13 +303,12 @@ async function buildWidget() {
          <image styles="${styles.task.image}" src="${SFSymbol.named('circle').image}" />
          <spacer value="6" />
          <text styles="${styles.task.text}">${task.name}</text>
-         ${
-          task.date
+         ${task.date
           ? concatMarkup/* xml */`
             <text styles="${styles.task.date}"> — ${new RelativeDateTimeFormatter().string(new Date(task.date), new Date())}</text>
           `
           : ''
-         }
+        }
         </hstack>
         <spacer value="8" />
       `,
