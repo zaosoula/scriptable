@@ -1,10 +1,15 @@
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
 // icon-color: cyan; icon-glyph: tasks;
+// This script was downloaded using ScriptDude.
+// Do not remove these lines, if you want to benefit from automatic updates.
+// source: https://raw.githubusercontent.com/zaosoula/scriptable/main/dist/Notion%20Widget.js; docs: https://github.com/zaosoula/scriptable; hash: 000000000;
+
 import NotionApi from './libs/NotionApi';
 import { widgetMarkup, concatMarkup } from './libs/WidgetMarkup';
 import { getSliceForWidget, generateSlices } from './libs/NoBackground';
 const KEYCHAIN_KEY = 'fr.zaosoula.notionwidget';
+
 const getDefaultConfig = () => ({
   notionSecret: '',
   databaseId: '',
