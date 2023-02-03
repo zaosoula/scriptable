@@ -8,25 +8,16 @@
 import NotionApi from './libs/NotionApi';
 import { widgetMarkup, concatMarkup } from './libs/WidgetMarkup';
 import { getSliceForWidget, generateSlices } from './libs/NoBackground';
-const KEYCHAIN_KEY = 'fr.zaosoula.notionwidget';
+import Settings from './notion-widget/Settings';
 
-const getDefaultConfig = () => ({
+const settings = new Settings({ keychainKey: 'fr.zaosoula.notionwidget', defaultSettings: {
   notionSecret: '',
   databaseId: '',
   sorts: [],
   filter: {},
   color: 'auto',
   useBackgroundImage: false,
-})
-
-const fetchKeychainConfig = () => 
-  Keychain.contains(KEYCHAIN_KEY) 
-  ? { 
-      ...getDefaultConfig(), 
-      ...JSON.parse(Keychain.get(KEYCHAIN_KEY))
-    } 
-  : getDefaultConfig();
-let widgetConfig: ReturnType<typeof getDefaultConfig> = fetchKeychainConfig();
+}});
 
 (async () => {
   if (config.runsInApp && !args.notification) {
@@ -106,19 +97,19 @@ async function showSettings() {
       <summary>Notion settings</summary>
       
       <label for="notionSecret">Notion Integration Secret</label>
-      <input type="text" id="notionSecret" name="notionSecret" placeholder="secret_XXXXXXX" value="${widgetConfig.notionSecret}" required>
+      <input type="text" id="notionSecret" name="notionSecret" placeholder="secret_XXXXXXX" value="${settings.get('notionSecret')}" required>
       <small><a href="https://developers.notion.com/docs/create-a-notion-integration#step-1-create-an-integration">Create an integration</a></small>
       
       <label for="databaseId">Database ID</label>
-      <input type="text" id="databaseId" name="databaseId" placeholder="XXXXXXXXXX" value="${widgetConfig.databaseId}" required>
+      <input type="text" id="databaseId" name="databaseId" placeholder="XXXXXXXXXX" value="${settings.get('databaseId')}" required>
       <small><a href="https://developers.notion.com/docs/create-a-notion-integration#step-2-share-a-database-with-your-integration">Share a database with your integration</a></small>
 
       <label for="sorts">Sorts</label>
-      <textarea id="sorts" name="sorts" placeholder="[]" required>${JSON.stringify(widgetConfig.sorts, null, 2)}</textarea>
+      <textarea id="sorts" name="sorts" placeholder="[]" required>${JSON.stringify(settings.get('sorts'), null, 2)}</textarea>
       <small><a href="https://developers.notion.com/reference/post-database-query-sort">Sort object</a></small>
 
       <label for="filter">Filter</label>
-      <textarea id="filter" name="filter" placeholder="{}" required>${JSON.stringify(widgetConfig.filter, null, 2)}</textarea>
+      <textarea id="filter" name="filter" placeholder="{}" required>${JSON.stringify(settings.get('filter'), null, 2)}</textarea>
       <small><a href="https://developers.notion.com/reference/post-database-query-filter">Filter object</a></small>
 
     </details>
@@ -128,7 +119,7 @@ async function showSettings() {
       
       <fieldset>
         <label for="useBackgroundImage">
-          <input type="checkbox" id="useBackgroundImage" name="useBackgroundImage" role="switch" ${widgetConfig.useBackgroundImage ? 'checked' : ''}/>
+          <input type="checkbox" id="useBackgroundImage" name="useBackgroundImage" role="switch" ${settings.get('useBackgroundImage') ? 'checked' : ''}/>
           Use background image 
         </label>
         <small>
@@ -138,9 +129,9 @@ async function showSettings() {
 
       <label for="color">Text color</label>
       <select id="color" name="color" required>
-        ${selectOption('auto', 'System', widgetConfig.color)}
-        ${selectOption('black', 'Dark', widgetConfig.color)}
-        ${selectOption('white', 'Light', widgetConfig.color)}
+        ${selectOption('auto', 'System', settings.get('color'))}
+        ${selectOption('black', 'Dark', settings.get('color'))}
+        ${selectOption('white', 'Light', settings.get('color'))}
       </select>
     </details>
   </main>
@@ -163,8 +154,8 @@ async function showSettings() {
 
   const payload = await view.evaluateJavaScript('window.getSettings()');
 
-  widgetConfig = { ...widgetConfig, ...payload };
-  console.log(widgetConfig);
+  settings.patch(payload);
+  console.log(Object.fromEntries(settings));
 
   await testSettings();
 }
@@ -172,7 +163,7 @@ async function showSettings() {
 async function testSettings() {
   try {
     await fetchNotion();
-    Keychain.set(KEYCHAIN_KEY, JSON.stringify(widgetConfig));
+    settings.save();
   } catch (error) {
     const alert = new Alert();
     alert.title = 'Failed to fetch data from notion';
@@ -185,13 +176,13 @@ async function testSettings() {
 
     switch (action) {
       case -1:
-        widgetConfig = fetchKeychainConfig();
+        settings.load();
         return;
       case 0:
         await showSettings();
         break;
       case 1:
-        Keychain.set(KEYCHAIN_KEY, JSON.stringify(widgetConfig));
+        settings.save();
         break;
       default:
         break;
@@ -201,12 +192,12 @@ async function testSettings() {
 }
 
 async function fetchNotion() {
-  const notion = new NotionApi(widgetConfig.notionSecret);
+  const notion = new NotionApi(settings.get('notionSecret'));
 
-  const database = await notion.getDatabase(widgetConfig.databaseId);
-  const query = await notion.queryDatabase(widgetConfig.databaseId, {
-    filter: widgetConfig.filter,
-    sorts: widgetConfig.sorts,
+  const database = await notion.getDatabase(settings.get('databaseId'));
+  const query = await notion.queryDatabase(settings.get('databaseId'), {
+    filter: settings.get('filter'),
+    sorts: settings.get('sorts'),
   });
 
   if (database.object === 'error' || query.object === 'error') {
@@ -221,18 +212,20 @@ async function buildWidget() {
   try {
     const { database, query } = await fetchNotion();
 
+    const notionDeeplink = `notion://www.notion.so/${settings.get('databaseId')}`
+
     const tasks = query.results.map((task) => ({
-      url: `notion://www.notion.so/${widgetConfig.databaseId}`,
+      url: notionDeeplink,
       name: task.properties.Name.title[0].plain_text,
       date: task.properties.Deadline?.date?.start,
     }));
 
-    const notionDeepLink = `notion://www.notion.so/${widgetConfig.databaseId}`;
+    const notionDeepLink = notionDeeplink;
     let themeColor = Color.dynamic(Color.black(), Color.white());
-    if (widgetConfig.color !== 'auto') themeColor = Color[widgetConfig.color]();
+    if (settings.get('color') !== 'auto') themeColor = Color[settings.get('color')]();
     
     let backgroundImage = null;
-    if (widgetConfig.useBackgroundImage) {
+    if (settings.get('useBackgroundImage')) {
       backgroundImage = await getSliceForWidget(Script.name());
     }
 
