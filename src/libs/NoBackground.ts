@@ -514,36 +514,7 @@ function usesiCloud() {
 }
 //------------------------------------------------
 function FileManagerAdaptive() {
-  return module.filename
-    .includes('Documents/iCloud~')
+  return usesiCloud()
     ? FileManager.iCloud()
     : FileManager.local()
 }
-
-// -- END OF MODULE CODE --
-
-// if running self run config
-// const module_name = module.filename.match(/[^\/]+$/)[0].replace('.js', '')
-// if (module_name == Script.name()) {
-//   await(async () => {
-//     let opts = [
-//       'Generate Slices',
-//       'Clear Widget Positions Cache',
-//       'Cancel'
-//     ]
-
-//     let resp = await presentAlert(
-//       'No Background Configurator', opts, ALERTS_AS_SHEETS)
-//     switch (opts[resp]) {
-//       case 'Generate Slices':
-//         await generateSlices({})
-//         break;
-//       case 'Clear Widget Positions Cache':
-//         await resetConfig()
-//         await presentAlert('Cleared')
-//         break;
-//       default:
-//     }
-//   })()
-
-// } 

@@ -19,8 +19,10 @@ const settings = new Settings({ keychainKey: 'fr.zaosoula.notionwidget', default
   useBackgroundImage: false,
 }});
 
+let fetchCache = undefined;
+
 (async () => {
-  if (config.runsInApp && !args.notification) {
+  if (config.runsInApp) {
     await showMenu();
   }
 
@@ -34,29 +36,38 @@ async function showMenu() {
   const alert = new Alert();
   if (args.queryParameters.settings) {
     await showSettings();
-  }
-
-  alert.title = Script.name();
-  alert.addAction('Preview the widget');
-  alert.addAction('Open the settings');
-  alert.addAction('Generate widget background');
-  alert.addCancelAction('Close');
-  const action = await alert.presentSheet();
-  switch (action) {
-    case 0:
-      const widget = await buildWidget();
-      widget.presentMedium();
-      break;
-    case 1:
-      await showSettings();
-      await showMenu();
-      break;
-    case 2:
-      await generateSlices({ caller: 'self' });
-      console.log(await getSliceForWidget(Script.name(), true));
-      break;
-    default:
-      break;
+  } else if (args.queryParameters.refresh) {
+    const widget = await buildWidget();
+    Script.setWidget(widget);
+    Script.complete();
+    // @ts-ignore
+    App.close();
+  } else if (args.queryParameters.background) {
+    await generateSlices({ caller: 'self' });
+    await getSliceForWidget(Script.name(), true);
+  } else {
+    alert.title = Script.name();
+    alert.addAction('Preview the widget');
+    alert.addAction('Open the settings');
+    alert.addAction('Generate widget background');
+    alert.addCancelAction('Close');
+    const action = await alert.presentSheet();
+    switch (action) {
+      case 0:
+        const widget = await buildWidget();
+        widget.presentMedium();
+        break;
+      case 1:
+        await showSettings();
+        await showMenu();
+        break;
+      case 2:
+        await generateSlices({ caller: 'self' });
+        console.log(await getSliceForWidget(Script.name(), true));
+        break;
+      default:
+        break;
+    }
   }
 }
 
@@ -123,7 +134,7 @@ async function showSettings() {
           Use background image 
         </label>
         <small>
-          You can generate the background image from the main menu
+          You can generate the background image from the main menu <a href=${URLScheme.forRunningScript() + '?background=true'}>here</a>
         </small>
       </fieldset>
 
@@ -156,6 +167,7 @@ async function showSettings() {
 
   settings.patch(payload);
   console.log(Object.fromEntries(settings));
+  fetchCache = undefined;
 
   await testSettings();
 }
@@ -194,30 +206,51 @@ async function testSettings() {
 async function fetchNotion() {
   const notion = new NotionApi(settings.get('notionSecret'));
 
-  const database = await notion.getDatabase(settings.get('databaseId'));
-  const query = await notion.queryDatabase(settings.get('databaseId'), {
-    filter: settings.get('filter'),
-    sorts: settings.get('sorts'),
-  });
+  let database, query;
+  if(fetchCache) {
+    ({ database, query } = fetchCache);
+  }else{
+    database = await notion.getDatabase(settings.get('databaseId')) ;
+    query = await notion.queryDatabase(settings.get('databaseId'), {
+      filter: settings.get('filter'),
+      sorts: settings.get('sorts'),
+    });
+  }
+  
 
   if (database.object === 'error' || query.object === 'error') {
     console.warn(database.message || query.message);
     throw new Error(database.message || query.message);
   }
-  return { database, query };
+
+  fetchCache = { database, query };
+  return { database, query, notion };
 };
 
 // eslint-disable-next-line consistent-return
 async function buildWidget() {
   try {
-    const { database, query } = await fetchNotion();
+    const { database, query, notion } = await fetchNotion();
+
+    const iconRender = async (icon, fallback, {text, image} = {image: {}, text: {}}) => {
+      if(icon?.type === 'external' && !icon.external.url.endsWith('.svg')) {
+        return concatMarkup/* xml */`<image styles="${image}" src="${await notion.getImage(icon.external.url)}" />`;
+      }
+
+      if(icon?.type === 'emoji') {
+        return concatMarkup/* xml */`<text styles="${text}">${icon.emoji}</text>`;
+      }
+
+      return concatMarkup/* xml */`<image styles="${image}" src="${SFSymbol.named(fallback).image}" />`;
+    }
 
     const notionDeeplink = `notion://www.notion.so/${settings.get('databaseId')}`
-
+    
     const tasks = query.results.map((task) => ({
       url: notionDeeplink,
       name: task.properties.Name.title[0].plain_text,
       date: task.properties.Deadline?.date?.start,
+      icon: task.icon,
     }));
 
     const notionDeepLink = notionDeeplink;
@@ -237,16 +270,21 @@ async function buildWidget() {
         stack: {
           url: notionDeepLink,
         },
-        image: {
-          imageSize: new Size(20, 20),
-          tintColor: themeColor,
+        icon: {
+          image: {
+            imageSize: new Size(20, 20),
+            tintColor: themeColor,
+          },
+          text: {
+            font: Font.regularMonospacedSystemFont(15),
+          }
         },
         text: {
           textColor: themeColor,
           font: Font.boldSystemFont(15),
         },
         btnRefresh: {
-          url: 'shortcuts://run-shortcut?name=Refresh%20All%20Widgets',
+          url: URLScheme.forRunningScript() + '?refresh=true',
           imageSize: new Size(20, 20),
           tintColor: themeColor,
         },
@@ -260,11 +298,16 @@ async function buildWidget() {
         stack: {
           url: notionDeepLink,
         },
-        image: {
-          imageSize: new Size(15, 15),
-          tintColor: themeColor,
-          imageOpacity: 0.75,
-          url: notionDeepLink,
+        icon: {
+          image: {
+            imageSize: new Size(15, 15),
+            tintColor: themeColor,
+            imageOpacity: 0.75,
+            url: notionDeepLink,
+          },
+          text: {
+            font: Font.regularMonospacedSystemFont(15),
+          }
         },
         text: {
           textColor: themeColor,
@@ -280,12 +323,11 @@ async function buildWidget() {
 
     const tasksToDisplay = Math.min(tasks.length, 4);
 
-
     const widget = await widgetMarkup/* xml */`
 <widget styles="${styles.widget}">
   <spacer value="16" />
   <hstack styles="${styles.header.stack}">
-    <image styles="${styles.header.image}" src="${SFSymbol.named('checklist').image}" />
+    ${await iconRender(database.icon, 'checklist', styles.header.icon)}
     <spacer value="6" />
     <text styles="${styles.header.text}">${database.title[0].plain_text}</text>
     <spacer />
@@ -295,10 +337,10 @@ async function buildWidget() {
   </hstack>
   <spacer value="10" />
   <vstack>
-    ${tasks.slice(0, tasksToDisplay).map(
-      (task) => concatMarkup/* xml */`
+    ${await Promise.all(tasks.slice(0, tasksToDisplay).map(
+      async (task) => concatMarkup/* xml */`
         <hstack styles="${styles.task.stack}">
-         <image styles="${styles.task.image}" src="${SFSymbol.named('circle').image}" />
+         ${await iconRender(task.icon, 'circle', styles.task.icon)}
          <spacer value="6" />
          <text styles="${styles.task.text}">${task.name}</text>
          ${task.date
@@ -310,10 +352,10 @@ async function buildWidget() {
         </hstack>
         <spacer value="8" />
       `,
-    )}
+    ))}
     ${tasks.length > tasksToDisplay ? concatMarkup/* xml */`
     <hstack>
-      <image styles="${styles.task.image}" src="${SFSymbol.named('plus.circle').image}" />
+      <image styles="${styles.task.icon.image}" src="${SFSymbol.named('plus.circle').image}" />
       <spacer value="6" />
       <text styles="${styles.task.text}">${(tasks.length - tasksToDisplay).toString()} more</text>
     </hstack>
